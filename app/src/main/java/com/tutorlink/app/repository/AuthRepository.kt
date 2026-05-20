@@ -89,7 +89,7 @@ class AuthRepository @Inject constructor(
                 } else {
                     val profileRes = api.registerTutor(
                         body.userId, 
-                        TutorRequest("Especialidad pendiente", "Sin descripción", 0.0), 
+                        TutorRequest("Especialidad pendiente", "Sin descripción", 10.0), // Cambiado de 0.0 a 10.0 para cumplir @Positive
                         bearerToken
                     )
                     if (profileRes.isSuccessful) {
@@ -147,35 +147,11 @@ class AuthRepository @Inject constructor(
 
     suspend fun fetchAndSaveProfileId(userId: Long, role: UserRole, token: String? = null) {
         val email = sessionManager.userEmail.firstOrNull()
-        android.util.Log.d("AuthRepository", "Iniciando recuperación de perfil para userId: $userId, email: $email")
+        android.util.Log.d("AuthRepository", "Iniciando recuperación de perfil por email: $email")
 
         try {
-            // Intento 1: Por UserId (Endpoint directo)
-            val success = when (role) {
-                UserRole.STUDENT -> {
-                    val res = api.getStudentByUserId(userId, token)
-                    if (res.isSuccessful) {
-                        res.body()?.id?.let { sessionManager.saveProfileId(it); true } ?: false
-                    } else false
-                }
-                UserRole.TUTOR -> {
-                    val res = api.getTutorByUserId(userId, token)
-                    if (res.isSuccessful) {
-                        res.body()?.id?.let { sessionManager.saveProfileId(it); true } ?: false
-                    } else false
-                }
-                else -> false
-            }
-
-            if (success) {
-                android.util.Log.d("AuthRepository", "Perfil recuperado con éxito por UserId")
-                return
-            }
-
-            // Intento 2: Fallback por Email (Búsqueda en lista global)
-            // Si el endpoint directo falló, buscamos en la lista completa usando el email como llave.
+            // Dado que los endpoints /user/{userId} no existen, vamos directo al fallback por Email
             if (!email.isNullOrBlank()) {
-                android.util.Log.d("AuthRepository", "Intento 1 falló. Iniciando búsqueda por email...")
                 when (role) {
                     UserRole.STUDENT -> {
                         val all = api.getAllStudents(token)
