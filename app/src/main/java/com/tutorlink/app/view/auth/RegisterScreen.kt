@@ -33,6 +33,7 @@ import com.tutorlink.app.view.components.RoleSelector
 import com.tutorlink.app.view.components.TutoButton
 import com.tutorlink.app.view.components.TutoTextField
 import com.tutorlink.app.viewmodel.AuthViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun RegisterScreen(
@@ -46,9 +47,12 @@ fun RegisterScreen(
     var selectedRoleStr by remember { mutableStateOf("Estudiante") }
     
     val authState by viewModel.authState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(key1 = authState) {
         if (authState is Resource.Success) {
+            snackbarHostState.showSnackbar("¡Registro exitoso! Bienvenido a TutorLink")
+            delay(1500)
             navController.navigate(Screen.Splash.route) {
                 popUpTo(Screen.Register.route) { inclusive = true }
             }
@@ -57,116 +61,119 @@ fun RegisterScreen(
 
     val scrollState = rememberScrollState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.White)
-            .verticalScroll(scrollState)
-    ) {
-        // Header Section - Matching Login Style
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(ExtraLightPurple)
-                .padding(top = 80.dp, bottom = 48.dp, start = 32.dp, end = 32.dp)
-        ) {
-            Column {
-                Text(
-                    text = "Crea tu cuenta",
-                    style = MaterialTheme.typography.displayLarge,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-                Text(
-                    text = "Únete a TutorLink hoy mismo",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.Gray
-                )
-            }
-        }
-
-        // Form Section
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .padding(padding)
+                .background(Color.White)
+                .verticalScroll(scrollState)
         ) {
-            RoleSelector(
-                selectedRole = selectedRoleStr,
-                onRoleSelected = { selectedRoleStr = it }
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            TutoTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = "NOMBRE COMPLETO",
-                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray.copy(alpha = 0.5f)) },
-                placeholder = { Text("Tu nombre", color = Color.Gray.copy(alpha = 0.5f)) }
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            TutoTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = "CORREO ELECTRÓNICO",
-                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color.Gray.copy(alpha = 0.5f)) },
-                placeholder = { Text("Correo electrónico", color = Color.Gray.copy(alpha = 0.5f)) },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email)
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            TutoTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = "CONTRASEÑA",
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray.copy(alpha = 0.5f)) },
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = null,
-                            tint = Color.Gray
-                        )
-                    }
-                },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password)
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            TutoButton(
-                text = "Registrarse",
-                onClick = {
-                    val role = if (selectedRoleStr == "Estudiante") UserRole.STUDENT else UserRole.TUTOR
-                    viewModel.register(
-                        RegisterRequest(name, email, password, role)
+            // Header Section
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ExtraLightPurple)
+                    .padding(top = 80.dp, bottom = 48.dp, start = 32.dp, end = 32.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "Crea tu cuenta",
+                        style = MaterialTheme.typography.displayLarge,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
                     )
-                },
-                isLoading = authState is Resource.Loading
-            )
-
-            if (authState is Resource.Error) {
-                Text(
-                    text = (authState as Resource.Error).message ?: "Error al conectar con el servidor",
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
+                    Text(
+                        text = "Únete a TutorLink hoy mismo",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Gray
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            // Form Section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                RoleSelector(
+                    selectedRole = selectedRoleStr,
+                    onRoleSelected = { selectedRoleStr = it }
+                )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("¿Ya tienes cuenta? ", color = Color.Gray)
-                TextButton(onClick = { navController.popBackStack() }) {
-                    Text("Inicia sesión", color = Color.Black, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(32.dp))
+
+                TutoTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = "NOMBRE COMPLETO",
+                    leadingIcon = { Icon(Icons.Default.Person, null, tint = Color.Gray.copy(alpha = 0.5f)) },
+                    placeholder = { Text("Tu nombre") }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                TutoTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = "CORREO ELECTRÓNICO",
+                    leadingIcon = { Icon(Icons.Default.Email, null, tint = Color.Gray.copy(alpha = 0.5f)) },
+                    placeholder = { Text("Correo electrónico") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Email)
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                TutoTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = "CONTRASEÑA",
+                    leadingIcon = { Icon(Icons.Default.Lock, null, tint = Color.Gray.copy(alpha = 0.5f)) },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = null,
+                                tint = Color.Gray
+                            )
+                        }
+                    },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Password)
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                TutoButton(
+                    text = "Registrarse",
+                    onClick = {
+                        val role = if (selectedRoleStr == "Estudiante") UserRole.STUDENT else UserRole.TUTOR
+                        viewModel.register(RegisterRequest(name, email, password, role))
+                    },
+                    isLoading = authState is Resource.Loading
+                )
+
+                if (authState is Resource.Error) {
+                    Text(
+                        text = (authState as Resource.Error).message ?: "Error al conectar con el servidor",
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 16.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("¿Ya tienes cuenta? ", color = Color.Gray)
+                    TextButton(onClick = { navController.popBackStack() }) {
+                        Text("Inicia sesión", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

@@ -51,12 +51,15 @@ object NetworkModule {
             
             // Solo agregar Token si NO es una ruta de autenticación pública
             if (!path.contains("/api/auth/")) {
-                val token = runBlocking {
-                    sessionManager.authToken.first()
-                }
-                if (!token.isNullOrEmpty()) {
-                    // Usamos .header() para asegurar que el token sea único y esté limpio
-                    builder.header("Authorization", "Bearer ${token.trim()}")
+                // IMPORTANTE: Si ya tiene un encabezado de Autorización (pasado manualmente), NO lo sobrescribas
+                val existingAuth = original.header("Authorization")
+                if (existingAuth.isNullOrEmpty()) {
+                    val token = runBlocking {
+                        sessionManager.authToken.first()
+                    }
+                    if (!token.isNullOrEmpty()) {
+                        builder.header("Authorization", "Bearer ${token.trim()}")
+                    }
                 }
             }
             

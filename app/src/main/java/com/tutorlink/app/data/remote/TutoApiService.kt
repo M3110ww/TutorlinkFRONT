@@ -18,7 +18,9 @@ interface TutoApiService {
     suspend fun getActiveTutors(): Response<List<TutorResponse>>
 
     @GET("api/tutors/all")
-    suspend fun getAllTutors(): Response<List<TutorResponse>>
+    suspend fun getAllTutors(
+        @Header("Authorization") token: String? = null
+    ): Response<List<TutorResponse>>
 
     @GET("api/tutors/{id}")
     suspend fun getTutorById(@Path("id") id: Long): Response<TutorResponse>
@@ -35,12 +37,16 @@ interface TutoApiService {
      *   }
      */
     @GET("api/tutors/user/{userId}")
-    suspend fun getTutorByUserId(@Path("userId") userId: Long): Response<TutorResponse>
+    suspend fun getTutorByUserId(
+        @Path("userId") userId: Long,
+        @Header("Authorization") token: String? = null
+    ): Response<TutorResponse>
 
     @POST("api/tutors/user/{userId}")
     suspend fun registerTutor(
         @Path("userId") userId: Long,
-        @Body request: TutorRequest
+        @Body request: TutorRequest,
+        @Header("Authorization") token: String? = null
     ): Response<TutorResponse>
 
     @PUT("api/tutors/{id}")
@@ -69,15 +75,21 @@ interface TutoApiService {
      * The backend already has EstudianteRepository.findByUserId(userId) — just expose it.
      */
     @GET("api/students/user/{userId}")
-    suspend fun getStudentByUserId(@Path("userId") userId: Long): Response<StudentResponse>
+    suspend fun getStudentByUserId(
+        @Path("userId") userId: Long,
+        @Header("Authorization") token: String? = null
+    ): Response<StudentResponse>
 
     @GET("api/students")
-    suspend fun getAllStudents(): Response<List<StudentResponse>>
+    suspend fun getAllStudents(
+        @Header("Authorization") token: String? = null
+    ): Response<List<StudentResponse>>
 
     @POST("api/students/user/{userId}")
     suspend fun registerStudent(
         @Path("userId") userId: Long,
-        @Body request: StudentRequest
+        @Body request: StudentRequest,
+        @Header("Authorization") token: String? = null
     ): Response<StudentResponse>
 
     @PUT("api/students/{id}")

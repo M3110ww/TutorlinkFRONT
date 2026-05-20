@@ -4,7 +4,7 @@ import com.google.gson.annotations.SerializedName
 
 data class StudentRequest(
     @SerializedName("academicLevel") val academicLevel: String,
-    @SerializedName("interest")      val interest: String?
+    @SerializedName("interests")     val interests: String?
 )
 
 data class StudentResponse(

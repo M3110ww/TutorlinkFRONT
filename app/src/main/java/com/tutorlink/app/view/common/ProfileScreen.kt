@@ -72,26 +72,37 @@ fun ProfileScreen(
 
     // Handle update results
     LaunchedEffect(studentUpdateResult) {
-        studentUpdateResult?.let {
-            if (it is Resource.Success) {
-                isEditMode = false
-                scope.launch { snackbarHostState.showSnackbar("Perfil actualizado") }
-                studentViewModel.clearUpdateResult()
-                studentViewModel.loadProfile()
-            } else if (it is Resource.Error) {
-                scope.launch { snackbarHostState.showSnackbar(it.message ?: "Error al actualizar") }
+        studentUpdateResult?.let { res ->
+            when (res) {
+                is Resource.Success -> {
+                    isEditMode = false
+                    scope.launch { snackbarHostState.showSnackbar("¡Perfil de estudiante actualizado!") }
+                    studentViewModel.clearUpdateResult()
+                    studentViewModel.loadProfile()
+                }
+                is Resource.Error -> {
+                    scope.launch { snackbarHostState.showSnackbar(res.message ?: "Error al actualizar") }
+                    studentViewModel.clearUpdateResult()
+                }
+                else -> {}
             }
         }
     }
+    
     LaunchedEffect(tutorUpdateResult) {
-        tutorUpdateResult?.let {
-            if (it is Resource.Success) {
-                isEditMode = false
-                scope.launch { snackbarHostState.showSnackbar("Perfil actualizado") }
-                tutorViewModel.clearUpdateResult()
-                tutorViewModel.loadProfile()
-            } else if (it is Resource.Error) {
-                scope.launch { snackbarHostState.showSnackbar(it.message ?: "Error al actualizar") }
+        tutorUpdateResult?.let { res ->
+            when (res) {
+                is Resource.Success -> {
+                    isEditMode = false
+                    scope.launch { snackbarHostState.showSnackbar("¡Perfil de tutor actualizado!") }
+                    tutorViewModel.clearUpdateResult()
+                    tutorViewModel.loadProfile()
+                }
+                is Resource.Error -> {
+                    scope.launch { snackbarHostState.showSnackbar(res.message ?: "Error al actualizar") }
+                    tutorViewModel.clearUpdateResult()
+                }
+                else -> {}
             }
         }
     }
@@ -222,10 +233,25 @@ fun ProfileScreen(
                         text = "Guardar cambios",
                         isLoading = isUpdating,
                         onClick = {
-                            if (userRole == "STUDENT") {
-                                studentViewModel.updateProfile(academicLevel, interests)
-                            } else {
-                                tutorViewModel.updateProfile(specialty, description, hourlyRate.toDoubleOrNull() ?: 0.0)
+                            when (userRole) {
+                                "STUDENT" -> {
+                                    if (academicLevel.isBlank()) {
+                                        scope.launch { snackbarHostState.showSnackbar("El nivel académico es requerido") }
+                                    } else {
+                                        studentViewModel.updateProfile(academicLevel, interests)
+                                    }
+                                }
+                                "TUTOR" -> {
+                                    val rate = hourlyRate.toDoubleOrNull()
+                                    if (specialty.isBlank() || rate == null) {
+                                        scope.launch { snackbarHostState.showSnackbar("Especialidad y tarifa válida requeridas") }
+                                    } else {
+                                        tutorViewModel.updateProfile(specialty, description, rate)
+                                    }
+                                }
+                                else -> {
+                                    scope.launch { snackbarHostState.showSnackbar("Error: Rol de usuario no identificado") }
+                                }
                             }
                         }
                     )

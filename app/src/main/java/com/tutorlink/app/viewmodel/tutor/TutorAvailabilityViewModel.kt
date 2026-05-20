@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.tutorlink.app.data.local.SessionManager
 import com.tutorlink.app.data.remote.dto.AvailabilityRequest
 import com.tutorlink.app.data.remote.dto.AvailabilityResponse
+import com.tutorlink.app.repository.AuthRepository
 import com.tutorlink.app.repository.AvailabilityRepository
 import com.tutorlink.app.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,6 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TutorAvailabilityViewModel @Inject constructor(
     private val availabilityRepository: AvailabilityRepository,
+    private val authRepository: AuthRepository,
     private val sessionManager: SessionManager
 ) : ViewModel() {
 
@@ -35,19 +37,39 @@ class TutorAvailabilityViewModel @Inject constructor(
     init { getAvailability() }
 
     fun getAvailability() = viewModelScope.launch {
-        // FIXED: profileId = Tutor.id (tutors table), NOT userId
-        val tutorId = cachedTutorId ?: sessionManager.profileId.first()
-        cachedTutorId = tutorId
+        _availability.value = Resource.Loading()
+        
+        var tutorId = cachedTutorId ?: sessionManager.profileId.first()
+        
+        if (tutorId == null) {
+            authRepository.refreshProfileId()
+            tutorId = sessionManager.profileId.first()
+        }
+
         if (tutorId == null) {
             _availability.value = Resource.Error("Perfil de tutor no encontrado.")
             return@launch
         }
+        
+        cachedTutorId = tutorId
         availabilityRepository.getByTutor(tutorId).collect { _availability.value = it }
     }
 
     fun addSlot(dayOfWeek: Int, startTime: String, endTime: String) = viewModelScope.launch {
-        val tutorId = cachedTutorId ?: return@launch
+        var tutorId = cachedTutorId ?: sessionManager.profileId.first()
         
+        if (tutorId == null) {
+            authRepository.refreshProfileId()
+            tutorId = sessionManager.profileId.first()
+        }
+
+        if (tutorId == null) {
+            _actionResult.value = "Error: Perfil no encontrado"
+            return@launch
+        }
+        
+        cachedTutorId = tutorId
+
         // Aseguramos formato HH:mm:ss para el backend
         val formattedStart = if (startTime.count { it == ':' } == 1) "$startTime:00" else startTime
         val formattedEnd = if (endTime.count { it == ':' } == 1) "$endTime:00" else endTime

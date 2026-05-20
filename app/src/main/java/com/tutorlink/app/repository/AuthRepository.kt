@@ -5,6 +5,7 @@ import com.tutorlink.app.data.remote.TutoApiService
 import com.tutorlink.app.data.remote.dto.*
 import com.tutorlink.app.utils.Resource
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
@@ -14,7 +15,7 @@ import javax.inject.Singleton
 class AuthRepository @Inject constructor(
     private val api: TutoApiService,
     private val sessionManager: SessionManager
-) {
+) : BaseRepository() {
     val userRole:  Flow<String?> = sessionManager.userRole
     val userName:  Flow<String?> = sessionManager.userName
     val authToken: Flow<String?> = sessionManager.authToken
@@ -26,7 +27,8 @@ class AuthRepository @Inject constructor(
         val result = safeCall { api.login(request) }
         if (result is Resource.Success) {
             val body = result.data!!
-            // Save base session first (token is needed for profile fetch)
+            
+            // 1. Guardar sesión
             sessionManager.saveSession(
                 token  = body.token,
                 role   = body.role.name,
@@ -34,8 +36,11 @@ class AuthRepository @Inject constructor(
                 userId = body.userId,
                 email  = request.email
             )
-            // FIXED: Fetch and save profile ID (student/tutor table ID)
-            fetchAndSaveProfileId(body.userId, body.role)
+            
+            // 2. Intentar recuperar el profileId inmediatamente
+            // Pasamos el token manual porque el interceptor podría fallar en el primer milisegundo
+            val bearerToken = "Bearer ${body.token}"
+            fetchAndSaveProfileId(body.userId, body.role, bearerToken)
         }
         emit(result)
     }
@@ -43,9 +48,11 @@ class AuthRepository @Inject constructor(
     fun register(request: RegisterRequest): Flow<Resource<AuthResponse>> = flow {
         emit(Resource.Loading())
         val result = safeCall { api.register(request) }
+        
         if (result is Resource.Success) {
             val body = result.data!!
-            // FIXED: No login fallback needed — backend always returns AuthResponse on register
+            
+            // 1. Guardar la sesión básica (token y userId) para que el interceptor pueda funcionar
             sessionManager.saveSession(
                 token  = body.token,
                 role   = body.role.name,
@@ -53,54 +60,148 @@ class AuthRepository @Inject constructor(
                 userId = body.userId,
                 email  = request.email
             )
-            fetchAndSaveProfileId(body.userId, body.role)
+            
+            // 2. CREACIÓN OBLIGATORIA DEL PERFIL
+            // Pasamos el token manualmente como "plan B" por si el DataStore aún no ha persistido el token
+            val bearerToken = "Bearer ${body.token}"
+            
+            val profileIdSaved = try {
+                if (body.role == UserRole.STUDENT) {
+                    val profileRes = api.registerStudent(
+                        body.userId, 
+                        StudentRequest("Bachiller", "Intereses generales"), 
+                        bearerToken
+                    )
+                    if (profileRes.isSuccessful) {
+                        val pId = profileRes.body()?.id
+                        if (pId != null) {
+                            sessionManager.saveProfileId(pId)
+                            android.util.Log.d("AuthRepository", "Perfil Estudiante creado con ID: $pId")
+                            true
+                        } else {
+                            android.util.Log.e("AuthRepository", "Perfil Estudiante creado pero ID es NULL")
+                            false
+                        }
+                    } else {
+                        android.util.Log.e("AuthRepository", "Error API registerStudent: ${profileRes.code()} - ${profileRes.errorBody()?.string()}")
+                        false
+                    }
+                } else {
+                    val profileRes = api.registerTutor(
+                        body.userId, 
+                        TutorRequest("Especialidad pendiente", "Sin descripción", 0.0), 
+                        bearerToken
+                    )
+                    if (profileRes.isSuccessful) {
+                        val pId = profileRes.body()?.id
+                        if (pId != null) {
+                            sessionManager.saveProfileId(pId)
+                            android.util.Log.d("AuthRepository", "Perfil Tutor creado con ID: $pId")
+                            true
+                        } else {
+                            android.util.Log.e("AuthRepository", "Perfil Tutor creado pero ID es NULL")
+                            false
+                        }
+                    } else {
+                        android.util.Log.e("AuthRepository", "Error API registerTutor: ${profileRes.code()} - ${profileRes.errorBody()?.string()}")
+                        false
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AuthRepository", "Excepción creando perfil: ${e.message}", e)
+                false
+            }
+
+            if (profileIdSaved) {
+                emit(result)
+            } else {
+                // Re-intentar obtener el ID si la creación falló o no devolvió el ID (tal vez ya existía)
+                fetchAndSaveProfileId(body.userId, body.role, bearerToken)
+                val finalId = sessionManager.profileId.first() // Usar first() para esperar el valor
+                if (finalId != null) {
+                    emit(result)
+                } else {
+                    emit(Resource.Error("El usuario se creó correctamente, pero no pudimos inicializar tu perfil. Por favor, intenta iniciar sesión de nuevo."))
+                }
+            }
+        } else {
+            emit(result)
         }
-        emit(result)
     }
 
     /**
-     * CRITICAL FIX: After login, fetch the profile from students/tutors table
-     * to get the correct profileId needed for session endpoints.
+     * Intenta recuperar y guardar el profileId si falta.
      */
-    private suspend fun fetchAndSaveProfileId(userId: Long, role: UserRole) {
+    suspend fun refreshProfileId() {
+        val uId = sessionManager.userId.first()
+        val roleStr = sessionManager.userRole.first()
+        val token = sessionManager.authToken.first()
+        
+        if (uId != null && roleStr != null) {
+            val role = try { UserRole.valueOf(roleStr) } catch(e: Exception) { null }
+            role?.let {
+                fetchAndSaveProfileId(uId, it, token?.let { t -> "Bearer $t" })
+            }
+        }
+    }
+
+    suspend fun fetchAndSaveProfileId(userId: Long, role: UserRole, token: String? = null) {
+        val email = sessionManager.userEmail.firstOrNull()
+        android.util.Log.d("AuthRepository", "Iniciando recuperación de perfil para userId: $userId, email: $email")
+
         try {
-            val savedEmail = sessionManager.userEmail.firstOrNull()
-            
-            when (role) {
+            // Intento 1: Por UserId (Endpoint directo)
+            val success = when (role) {
                 UserRole.STUDENT -> {
-                    val directRes = try { api.getStudentByUserId(userId) } catch (e: Exception) { null }
-                    if (directRes != null && directRes.isSuccessful && directRes.body() != null) {
-                        sessionManager.saveProfileId(directRes.body()!!.id)
-                    } else if (savedEmail != null) {
-                        // Fallback: Filter all students by email
-                        val listRes = try { api.getAllStudents() } catch (e: Exception) { null }
-                        if (listRes != null && listRes.isSuccessful && listRes.body() != null) {
-                            val student = listRes.body()!!.find { it.email == savedEmail }
-                            if (student != null) {
-                                sessionManager.saveProfileId(student.id)
-                            }
-                        }
-                    }
+                    val res = api.getStudentByUserId(userId, token)
+                    if (res.isSuccessful) {
+                        res.body()?.id?.let { sessionManager.saveProfileId(it); true } ?: false
+                    } else false
                 }
                 UserRole.TUTOR -> {
-                    val directRes = try { api.getTutorByUserId(userId) } catch (e: Exception) { null }
-                    if (directRes != null && directRes.isSuccessful && directRes.body() != null) {
-                        sessionManager.saveProfileId(directRes.body()!!.id)
-                    } else if (savedEmail != null) {
-                        // Fallback: Filter all tutors by email
-                        val listRes = try { api.getAllTutors() } catch (e: Exception) { null }
-                        if (listRes != null && listRes.isSuccessful && listRes.body() != null) {
-                            val tutor = listRes.body()!!.find { it.email == savedEmail }
-                            if (tutor != null) {
-                                sessionManager.saveProfileId(tutor.id)
+                    val res = api.getTutorByUserId(userId, token)
+                    if (res.isSuccessful) {
+                        res.body()?.id?.let { sessionManager.saveProfileId(it); true } ?: false
+                    } else false
+                }
+                else -> false
+            }
+
+            if (success) {
+                android.util.Log.d("AuthRepository", "Perfil recuperado con éxito por UserId")
+                return
+            }
+
+            // Intento 2: Fallback por Email (Búsqueda en lista global)
+            // Si el endpoint directo falló, buscamos en la lista completa usando el email como llave.
+            if (!email.isNullOrBlank()) {
+                android.util.Log.d("AuthRepository", "Intento 1 falló. Iniciando búsqueda por email...")
+                when (role) {
+                    UserRole.STUDENT -> {
+                        val all = api.getAllStudents(token)
+                        if (all.isSuccessful) {
+                            val profile = all.body()?.find { it.email.equals(email, ignoreCase = true) }
+                            profile?.id?.let { 
+                                sessionManager.saveProfileId(it)
+                                android.util.Log.d("AuthRepository", "Perfil Estudiante encontrado por Email: $it")
                             }
                         }
                     }
+                    UserRole.TUTOR -> {
+                        val all = api.getAllTutors(token)
+                        if (all.isSuccessful) {
+                            val profile = all.body()?.find { it.email.equals(email, ignoreCase = true) }
+                            profile?.id?.let { 
+                                sessionManager.saveProfileId(it)
+                                android.util.Log.d("AuthRepository", "Perfil Tutor encontrado por Email: $it")
+                            }
+                        }
+                    }
+                    else -> {}
                 }
-                UserRole.ADMIN -> { /* Admin uses userId directly */ }
             }
-        } catch (_: Exception) {
-            // Non-fatal, simply does not save profileId
+        } catch (e: Exception) {
+            android.util.Log.e("AuthRepository", "Fallo catastrófico en recuperación de perfil: ${e.message}")
         }
     }
 

@@ -71,7 +71,7 @@ fun LoginScreen(
         ) {
             Column {
                 IconButton(
-                    onClick = { /* Back */ },
+                    onClick = { navController.popBackStack() },
                     modifier = Modifier.offset(x = (-12).dp, y = (-40).dp)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
