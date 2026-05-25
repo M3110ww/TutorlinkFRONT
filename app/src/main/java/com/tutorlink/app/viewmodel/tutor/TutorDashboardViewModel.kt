@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tutorlink.app.data.local.SessionManager
 import com.tutorlink.app.data.remote.dto.SessionResponse
+import com.tutorlink.app.data.remote.dto.TutorResponse
 import com.tutorlink.app.repository.AuthRepository
 import com.tutorlink.app.repository.SessionRepository
+import com.tutorlink.app.repository.TutorRepository
 import com.tutorlink.app.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -15,6 +17,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TutorDashboardViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
+    private val tutorRepository: TutorRepository,
     private val authRepository: AuthRepository,
     private val sessionManager: SessionManager
 ) : ViewModel() {
@@ -22,27 +25,47 @@ class TutorDashboardViewModel @Inject constructor(
     private val _sessions = MutableStateFlow<Resource<List<SessionResponse>>>(Resource.Idle())
     val sessions: StateFlow<Resource<List<SessionResponse>>> = _sessions.asStateFlow()
 
-    init { getTutorSessions() }
+    private val _tutorProfile = MutableStateFlow<Resource<TutorResponse>>(Resource.Idle())
+    val tutorProfile: StateFlow<Resource<TutorResponse>> = _tutorProfile.asStateFlow()
 
-    fun getTutorSessions() = viewModelScope.launch {
+    init { 
+        observeProfileId()
+    }
+
+    private fun observeProfileId() {
+        sessionManager.profileId
+            .filterNotNull()
+            .distinctUntilChanged()
+            .onEach { id ->
+                getTutorProfileById(id)
+                getTutorSessionsById(id)
+            }
+            .launchIn(viewModelScope)
+    }
+
+    fun getTutorProfile() {
+        viewModelScope.launch {
+            val id = sessionManager.profileId.first()
+            if (id != null) getTutorProfileById(id)
+            else authRepository.refreshProfileId()
+        }
+    }
+
+    private fun getTutorProfileById(id: Long) = viewModelScope.launch {
+        _tutorProfile.value = Resource.Loading()
+        tutorRepository.getTutorById(id).collect { _tutorProfile.value = it }
+    }
+
+    fun getTutorSessions() {
+        viewModelScope.launch {
+            val id = sessionManager.profileId.first()
+            if (id != null) getTutorSessionsById(id)
+        }
+    }
+
+    private fun getTutorSessionsById(id: Long) = viewModelScope.launch {
         _sessions.value = Resource.Loading()
-        
-        var tutorId = sessionManager.profileId.first()
-        
-        // RECOVERY LOGIC: Si no hay ID, intentamos recuperarlo forzosamente
-        if (tutorId == null) {
-            authRepository.refreshProfileId()
-            tutorId = sessionManager.profileId.first()
-        }
-
-        if (tutorId == null) {
-            _sessions.value = Resource.Error(
-                "Perfil de tutor no encontrado. Completa tu registro."
-            )
-            return@launch
-        }
-
-        sessionRepository.getTutorSessions(tutorId).collect { _sessions.value = it }
+        sessionRepository.getTutorSessions(id).collect { _sessions.value = it }
     }
 
     fun confirmSession(sessionId: Long) = viewModelScope.launch {

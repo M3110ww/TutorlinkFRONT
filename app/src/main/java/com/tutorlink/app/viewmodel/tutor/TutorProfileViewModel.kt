@@ -69,7 +69,10 @@ class TutorProfileViewModel @Inject constructor(
             _updateResult.value = Resource.Error("Error: No se encontró el ID del perfil. Intenta re-iniciar sesión.")
             return@launch
         }
-        tutorRepository.updateTutor(profileId, TutorRequest(specialty, description, hourlyRate))
+        
+        val currentActive = (_profile.value as? Resource.Success)?.data?.active ?: false
+        
+        tutorRepository.updateTutor(profileId, TutorRequest(specialty, description, hourlyRate, active = currentActive))
             .collect { _updateResult.value = it }
     }
 

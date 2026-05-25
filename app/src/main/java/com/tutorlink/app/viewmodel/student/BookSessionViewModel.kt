@@ -52,6 +52,18 @@ class BookSessionViewModel @Inject constructor(
         modality: SessionModality,
         meetingLink: String? = null
     ) = viewModelScope.launch {
+        // VALIDACIÓN: No permitir fechas pasadas
+        try {
+            val selectedDate = LocalDateTime.parse(scheduledAt)
+            if (selectedDate.isBefore(LocalDateTime.now())) {
+                _bookingResult.value = Resource.Error("No puedes programar una sesión en una fecha o hora que ya pasó.")
+                return@launch
+            }
+        } catch (e: Exception) {
+            // Si el formato es inválido, dejamos que el backend lo maneje, 
+            // pero lo ideal es que el selector de fecha del UI envíe ISO correcto.
+        }
+
         // FIXED: profileId not userId
         val studentId = sessionManager.profileId.first()
         if (studentId == null) {

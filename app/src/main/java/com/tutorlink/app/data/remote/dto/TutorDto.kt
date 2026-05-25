@@ -5,7 +5,8 @@ import com.google.gson.annotations.SerializedName
 data class TutorRequest(
     @SerializedName("specialty")   val specialty: String,
     @SerializedName("description") val description: String?,
-    @SerializedName("hourlyRate")  val hourlyRate: Double
+    @SerializedName("hourlyRate")  val hourlyRate: Double,
+    @SerializedName("active")      val active: Boolean = false
 )
 
 data class TutorResponse(

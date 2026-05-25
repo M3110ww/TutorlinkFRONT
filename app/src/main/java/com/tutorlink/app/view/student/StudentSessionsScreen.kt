@@ -1,6 +1,5 @@
 package com.tutorlink.app.view.student
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,7 +9,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import java.util.Locale
 import com.tutorlink.app.data.remote.dto.SessionResponse
 import com.tutorlink.app.data.remote.dto.SessionStatus
 import com.tutorlink.app.navigation.Screen
@@ -44,11 +41,11 @@ fun StudentSessionsScreen(
     reviewViewModel: CreateReviewViewModel = hiltViewModel()
 ) {
     val sessionsState by viewModel.sessions.collectAsState()
+    val currentFilter by viewModel.filter.collectAsState()
     val reviewResult by reviewViewModel.result.collectAsState()
     
     var showReviewSheet by remember { mutableStateOf<SessionResponse?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(reviewResult) {
         if (reviewResult is Resource.Success) {
@@ -76,37 +73,45 @@ fun StudentSessionsScreen(
             onRefresh = { viewModel.getSessions() },
             modifier = Modifier.padding(padding)
         ) {
-            when (sessionsState) {
-                is Resource.Idle, is Resource.Loading -> LoadingView()
-                is Resource.Success -> {
-                    val sessions = sessionsState.data ?: emptyList()
-                    if (sessions.isEmpty()) {
-                        EmptyStateView(
-                            icon = Icons.Default.CalendarToday,
-                            title = "Sin sesiones aún",
-                            subtitle = "Reserva tu primera tutoría con un experto",
-                            actionLabel = "Explorar tutores",
-                            onAction = { navController.navigate(Screen.TutorList.route) }
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(sessions) { session ->
-                                NewSessionItem(
-                                    session = session,
-                                    onLeaveReview = { showReviewSheet = session }
-                                )
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Filtros de estado
+                FilterRow(
+                    selectedStatus = currentFilter,
+                    onStatusSelected = { viewModel.setFilter(it) }
+                )
+
+                when (sessionsState) {
+                    is Resource.Idle, is Resource.Loading -> LoadingView()
+                    is Resource.Success -> {
+                        val sessions = sessionsState.data ?: emptyList()
+                        if (sessions.isEmpty()) {
+                            EmptyStateView(
+                                icon = Icons.Default.CalendarToday,
+                                title = if (currentFilter == null) "Sin sesiones aún" else "No hay sesiones ${currentFilter?.name?.lowercase()}",
+                                subtitle = "Reserva tu primera tutoría con un experto",
+                                actionLabel = if (currentFilter == null) "Explorar tutores" else null,
+                                onAction = { navController.navigate(Screen.TutorList.route) }
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                items(sessions) { session ->
+                                    NewSessionItem(
+                                        session = session,
+                                        onLeaveReview = { showReviewSheet = session }
+                                    )
+                                }
                             }
                         }
                     }
+                    is Resource.Error -> ErrorView(
+                        message = sessionsState.message ?: "Error al cargar sesiones",
+                        onRetry = { viewModel.getSessions() }
+                    )
                 }
-                is Resource.Error -> ErrorView(
-                    message = sessionsState.message ?: "Error al cargar sesiones",
-                    onRetry = { viewModel.getSessions() }
-                )
             }
         }
 
@@ -118,6 +123,39 @@ fun StudentSessionsScreen(
                     reviewViewModel.submitReview(showReviewSheet!!.id, rating, comment)
                 },
                 isSubmitting = reviewResult is Resource.Loading
+            )
+        }
+    }
+}
+
+@Composable
+fun FilterRow(
+    selectedStatus: SessionStatus?,
+    onStatusSelected: (SessionStatus?) -> Unit
+) {
+    val statuses = listOf(
+        null to "Todas",
+        SessionStatus.PENDING to "Pendientes",
+        SessionStatus.CONFIRMED to "Confirmadas",
+        SessionStatus.COMPLETED to "Completadas",
+        SessionStatus.CANCELLED to "Canceladas"
+    )
+
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(statuses) { (status, label) ->
+            FilterChip(
+                selected = selectedStatus == status,
+                onClick = { onStatusSelected(status) },
+                label = { Text(label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MainPurple,
+                    selectedLabelColor = Color.White
+                )
             )
         }
     }
@@ -165,7 +203,7 @@ fun ReviewBottomSheet(
     onSubmit: (Int, String) -> Unit,
     isSubmitting: Boolean
 ) {
-    var rating by remember { mutableStateOf(5) }
+    var rating by remember { mutableIntStateOf(5) }
     var comment by remember { mutableStateOf("") }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {

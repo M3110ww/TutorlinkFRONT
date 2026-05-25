@@ -58,7 +58,8 @@ interface TutoApiService {
     @PATCH("api/tutors/{id}/status")
     suspend fun changeTutorStatus(
         @Path("id") id: Long,
-        @Query("active") active: Boolean
+        @Query("active") active: Boolean,
+        @Header("Authorization") token: String? = null
     ): Response<TutorResponse>
 
     // ── Students ──────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ fun TutorListScreen(
     viewModel: TutorListViewModel = hiltViewModel()
 ) {
     val tutorsState by viewModel.tutors.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
+    val searchQuery by viewModel.searchQuery.collectAsState()
 
     Scaffold(
         topBar = {
@@ -47,12 +47,9 @@ fun TutorListScreen(
                 )
                 TutoSearchBar(
                     value = searchQuery,
-                    onValueChange = { 
-                        searchQuery = it
-                        viewModel.searchTutors(it)
-                    },
+                    onValueChange = { viewModel.onSearchQueryChange(it) },
                     modifier = Modifier.padding(horizontal = 20.dp),
-                    placeholder = "Ej: Matemáticas, Java, Física..."
+                    placeholder = "Buscar por nombre o materia..."
                 )
             }
         }
@@ -70,12 +67,9 @@ fun TutorListScreen(
                         EmptyStateView(
                             icon = Icons.Default.SearchOff,
                             title = "Sin resultados",
-                            subtitle = "No encontramos tutores con esa especialidad",
-                            actionLabel = "Limpiar búsqueda",
-                            onAction = { 
-                                searchQuery = ""
-                                viewModel.getTutors() 
-                            }
+                            subtitle = "No encontramos tutores o materias que coincidan con \"$searchQuery\"",
+                            actionLabel = "Ver todos los tutores",
+                            onAction = { viewModel.onSearchQueryChange("") }
                         )
                     } else {
                         LazyColumn(

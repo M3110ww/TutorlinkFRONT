@@ -30,15 +30,18 @@ import com.tutorlink.app.view.common.ErrorView
 import com.tutorlink.app.view.common.LoadingView
 import com.tutorlink.app.view.components.TutoCard
 import com.tutorlink.app.viewmodel.tutor.TutorAvailabilityViewModel
+import com.tutorlink.app.viewmodel.tutor.TutorDashboardViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TutorAvailabilityScreen(
     navController: NavController,
-    viewModel: TutorAvailabilityViewModel = hiltViewModel()
+    viewModel: TutorAvailabilityViewModel = hiltViewModel(),
+    dashboardViewModel: TutorDashboardViewModel = hiltViewModel()
 ) {
     val availabilityState by viewModel.availability.collectAsState()
+    val tutorProfileState by dashboardViewModel.tutorProfile.collectAsState()
     val actionResult by viewModel.actionResult.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -75,39 +78,68 @@ fun TutorAvailabilityScreen(
         }
     ) { padding ->
         PullToRefreshBox(
-            isRefreshing = availabilityState is Resource.Loading,
-            onRefresh = { viewModel.getAvailability() },
+            isRefreshing = availabilityState is Resource.Loading || tutorProfileState is Resource.Loading,
+            onRefresh = { 
+                viewModel.getAvailability()
+                dashboardViewModel.getTutorProfile()
+            },
             modifier = Modifier.padding(padding)
         ) {
-            when (availabilityState) {
-                is Resource.Idle, is Resource.Loading -> LoadingView()
-                is Resource.Success -> {
-                    val list = availabilityState.data ?: emptyList()
-                    if (list.isEmpty()) {
-                        EmptyStateView(
-                            icon = Icons.Default.EventAvailable,
-                            title = "Sin horarios configurados",
-                            subtitle = "Agrega los bloques de tiempo en los que estás disponible para que los estudiantes puedan reservarte."
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Banner de Cuenta Inactiva
+                if (tutorProfileState is Resource.Success && tutorProfileState.data?.active == false) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SoftOrange.copy(alpha = 0.2f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TextOrange.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            items(list) { slot ->
-                                AvailabilitySlotItem(
-                                    slot = slot, 
-                                    onDelete = { slot.id?.let { viewModel.deleteSlot(it) } }
-                                )
-                            }
+                            Icon(Icons.Default.Info, null, tint = TextOrange, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "Tu cuenta está pendiente de activación. No serás visible para los estudiantes hasta que un administrador te active.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextOrange
+                            )
                         }
                     }
                 }
-                is Resource.Error -> ErrorView(
-                    message = availabilityState.message ?: "Error al cargar disponibilidad",
-                    onRetry = { viewModel.getAvailability() }
-                )
+
+                Box(modifier = Modifier.weight(1f)) {
+                    when (availabilityState) {
+                        is Resource.Idle, is Resource.Loading -> LoadingView()
+                        is Resource.Success -> {
+                            val list = availabilityState.data ?: emptyList()
+                            if (list.isEmpty()) {
+                                EmptyStateView(
+                                    icon = Icons.Default.EventAvailable,
+                                    title = "Sin horarios configurados",
+                                    subtitle = "Agrega los bloques de tiempo en los que estás disponible para que los estudiantes puedan reservarte."
+                                )
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(list) { slot ->
+                                        AvailabilitySlotItem(
+                                            slot = slot, 
+                                            onDelete = { slot.id?.let { viewModel.deleteSlot(it) } }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        is Resource.Error -> ErrorView(
+                            message = availabilityState.message ?: "Error al cargar disponibilidad",
+                            onRetry = { viewModel.getAvailability() }
+                        )
+                    }
+                }
             }
         }
 

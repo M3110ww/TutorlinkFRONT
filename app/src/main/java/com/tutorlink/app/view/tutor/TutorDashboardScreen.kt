@@ -40,6 +40,7 @@ fun TutorDashboardScreen(
     dashboardViewModel: TutorDashboardViewModel = hiltViewModel()
 ) {
     val sessionsState by dashboardViewModel.sessions.collectAsState()
+    val tutorProfileState by dashboardViewModel.tutorProfile.collectAsState()
     val userName by authViewModel.userName.collectAsState()
 
     val today = LocalDate.now().toString()
@@ -82,8 +83,11 @@ fun TutorDashboardScreen(
         }
     ) { padding ->
         PullToRefreshBox(
-            isRefreshing = sessionsState is Resource.Loading,
-            onRefresh = { dashboardViewModel.getTutorSessions() },
+            isRefreshing = sessionsState is Resource.Loading || tutorProfileState is Resource.Loading,
+            onRefresh = { 
+                dashboardViewModel.getTutorSessions()
+                dashboardViewModel.getTutorProfile()
+            },
             modifier = Modifier.padding(padding)
         ) {
             Column(
@@ -104,7 +108,30 @@ fun TutorDashboardScreen(
                     TutoAvatar(name = userName ?: "Tutor", size = 50.dp)
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
+
+                // Banner de Cuenta Inactiva
+                if (tutorProfileState is Resource.Success && tutorProfileState.data?.active == false) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = SoftOrange.copy(alpha = 0.2f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TextOrange.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, null, tint = TextOrange)
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "Tu cuenta está pendiente de activación por el administrador. No serás visible para los estudiantes hasta entonces.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextOrange
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     TutoCard(modifier = Modifier.weight(1f), backgroundColor = ExtraLightPurple) {

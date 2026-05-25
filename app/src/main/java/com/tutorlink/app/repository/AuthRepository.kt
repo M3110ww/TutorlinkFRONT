@@ -89,14 +89,23 @@ class AuthRepository @Inject constructor(
                 } else {
                     val profileRes = api.registerTutor(
                         body.userId, 
-                        TutorRequest("Especialidad pendiente", "Sin descripción", 10.0), // Cambiado de 0.0 a 10.0 para cumplir @Positive
+                        TutorRequest("Especialidad pendiente", "Sin descripción", 10.0, active = false),
                         bearerToken
                     )
                     if (profileRes.isSuccessful) {
                         val pId = profileRes.body()?.id
                         if (pId != null) {
+                            // SEGURIDAD CRÍTICA: Forzamos el estado inactivo inmediatamente después de la creación
+                            // para asegurar que no sea visible hasta que el administrador lo apruebe.
+                            try {
+                                api.changeTutorStatus(pId, active = false, token = bearerToken)
+                            } catch (e: Exception) {
+                                // Logueamos pero continuamos para no romper el flujo del usuario
+                                android.util.Log.e("AuthRepository", "Error al forzar inactividad: ${e.message}")
+                            }
+                            
                             sessionManager.saveProfileId(pId)
-                            android.util.Log.d("AuthRepository", "Perfil Tutor creado con ID: $pId")
+                            android.util.Log.d("AuthRepository", "Perfil Tutor creado e inactivado con ID: $pId")
                             true
                         } else {
                             android.util.Log.e("AuthRepository", "Perfil Tutor creado pero ID es NULL")

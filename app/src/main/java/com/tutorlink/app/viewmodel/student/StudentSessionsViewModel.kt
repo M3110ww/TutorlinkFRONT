@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tutorlink.app.data.local.SessionManager
 import com.tutorlink.app.data.remote.dto.SessionResponse
+import com.tutorlink.app.data.remote.dto.SessionStatus
 import com.tutorlink.app.repository.AuthRepository
 import com.tutorlink.app.repository.SessionRepository
 import com.tutorlink.app.utils.Resource
@@ -20,9 +21,23 @@ class StudentSessionsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _sessions = MutableStateFlow<Resource<List<SessionResponse>>>(Resource.Idle())
-    val sessions: StateFlow<Resource<List<SessionResponse>>> = _sessions.asStateFlow()
+    
+    private val _filter = MutableStateFlow<SessionStatus?>(null)
+    val filter: StateFlow<SessionStatus?> = _filter.asStateFlow()
+
+    val sessions: StateFlow<Resource<List<SessionResponse>>> = combine(_sessions, _filter) { res, f ->
+        if (res is Resource.Success && f != null) {
+            Resource.Success(res.data?.filter { it.status == f } ?: emptyList())
+        } else {
+            res
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Resource.Idle())
 
     init { getSessions() }
+
+    fun setFilter(status: SessionStatus?) {
+        _filter.value = status
+    }
 
     fun getSessions() = viewModelScope.launch {
         _sessions.value = Resource.Loading()
